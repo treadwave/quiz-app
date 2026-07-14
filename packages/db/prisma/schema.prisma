@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String               @id @default(cuid())
+  email          String               @unique
+  passwordHash   String
+  name           String
+  createdAt      DateTime             @default(now())
+  quizzes        Quiz[]
+  sessionsHosted QuizSession[]        @relation("HostedSessions")
+  participations SessionParticipant[]
+}
+
+model Quiz {
+  id                     String        @id @default(cuid())
+  title                  String
+  description            String?
+  category               String?
+  ownerId                String
+  owner                  User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  defaultQuestionTimeSec Int           @default(20)
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  questions              Question[]
+  sessions               QuizSession[]
+}
+
+enum QuestionContentType {
+  TEXT
+  IMAGE
+}
+
+enum AnswerType {
+  SINGLE
+  MULTIPLE
+}
+
+model Question {
+  id           String              @id @default(cuid())
+  quizId       String
+  quiz         Quiz                @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  order        Int
+  text         String
+  contentType  QuestionContentType @default(TEXT)
+  imageUrl     String?
+  answerType   AnswerType          @default(SINGLE)
+  timeLimitSec Int?
+  points       Int                 @default(1000)
+  options      Option[]
+
+  @@index([quizId])
+}
+
+model Option {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  text       String
+  isCorrect  Boolean  @default(false)
+  order      Int
+
+  @@index([questionId])
+}
+
+enum SessionStatus {
+  LOBBY
+  ACTIVE
+  FINISHED
+}
+
+model QuizSession {
+  id                   String               @id @default(cuid())
+  quizId               String
+  quiz                 Quiz                 @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  hostId               String
+  host                 User                 @relation("HostedSessions", fields: [hostId], references: [id], onDelete: Cascade)
+  roomCode             String               @unique
+  status               SessionStatus        @default(LOBBY)
+  currentQuestionIndex Int                  @default(-1)
+  startedAt            DateTime?
+  endedAt              DateTime?
+  createdAt            DateTime             @default(now())
+  participants         SessionParticipant[]
+
+  @@index([quizId])
+  @@index([hostId])
+}
+
+model SessionParticipant {
+  id        String      @id @default(cuid())
+  sessionId String
+  session   QuizSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  score     Int         @default(0)
+  joinedAt  DateTime    @default(now())
+  answers   Answer[]
+
+  @@unique([sessionId, userId])
+}
+
+model Answer {
+  id                String              @id @default(cuid())
+  participantId     String
+  participant       SessionParticipant  @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  questionId        String
+  selectedOptionIds String[]
+  isCorrect         Boolean
+  pointsAwarded     Int
+  answeredAt        DateTime            @default(now())
+
+  @@unique([participantId, questionId])
+}
